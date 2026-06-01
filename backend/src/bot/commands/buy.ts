@@ -1,18 +1,12 @@
 import { ChatInputCommandInteraction } from 'discord.js';
-import { upsertUser } from '../../services/userService';
-import { startBuyFlow } from '../flows/buyFlow';
+import { getSetting } from '../../services/settingsService';
 
 export async function handleBuy(interaction: ChatInputCommandInteraction): Promise<void> {
-  await upsertUser({
-    discordId: interaction.user.id,
-    username: interaction.user.username,
-    displayName: interaction.user.displayName,
-  });
+  const shopChannelId = await getSetting('shop_channel_id');
+  const channelMention = shopChannelId ? `<#${shopChannelId}>` : 'the exchange channel';
 
   await interaction.reply({
-    content: '📩 Check your **DMs** — I\'ve sent you a message to start your USDT purchase!',
+    content: `💰 To buy or sell USDT, go to ${channelMention} and click the **Buy USDT** or **Sell USDT** button!`,
     ephemeral: true,
   });
-
-  await startBuyFlow(interaction.user);
 }

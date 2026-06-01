@@ -4,6 +4,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  TextChannel,
 } from 'discord.js';
 import { getBuyRate, getSellRate } from '../../services/priceService';
 import { setSetting } from '../../services/settingsService';
@@ -55,6 +56,6 @@ export async function handleSetup(interaction: ChatInputCommandInteraction): Pro
       .setStyle(ButtonStyle.Danger)
   );
 
-  await interaction.channel!.send({ embeds: [embed], components: [row] });
+  await (interaction.channel as TextChannel).send({ embeds: [embed], components: [row] });
   await interaction.editReply('✅ Shop message posted!');
 }
