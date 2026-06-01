@@ -9,11 +9,15 @@ import toast from 'react-hot-toast';
 
 const schema = z.object({
   exchange_rate: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number'),
+  rate_markup_percent: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Must be a valid percentage'),
   upi_id: z.string().min(1),
   bank_account_name: z.string().min(1),
   bank_account_number: z.string().min(1),
   bank_ifsc: z.string().min(1),
   bank_name: z.string().min(1),
+  our_wallet_trc20: z.string().min(1, 'Required for sell orders'),
+  our_wallet_bep20: z.string().min(1, 'Required for sell orders'),
+  our_wallet_erc20: z.string().min(1, 'Required for sell orders'),
   support_contact: z.string().min(1),
   support_response_hours: z.string().regex(/^\d+$/),
 });
@@ -37,18 +41,17 @@ export function SettingsForm({ settings, onSaved }: SettingsFormProps) {
       onSaved(updated);
       toast.success('Settings saved successfully!');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Save failed';
-      toast.error(message);
+      toast.error(err instanceof Error ? err.message : 'Save failed');
     }
   };
 
-  const Field = ({ name, label, placeholder }: { name: keyof FormData; label: string; placeholder?: string }) => (
+  const Field = ({ name, label, placeholder, mono }: { name: keyof FormData; label: string; placeholder?: string; mono?: boolean }) => (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       <input
         {...register(name)}
         placeholder={placeholder}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${mono ? 'font-mono' : ''}`}
       />
       {errors[name] && <p className="text-red-500 text-xs mt-1">{errors[name]?.message}</p>}
     </div>
@@ -56,30 +59,45 @@ export function SettingsForm({ settings, onSaved }: SettingsFormProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+
       <section>
-        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">Exchange Rate</h3>
-        <Field name="exchange_rate" label="INR per USDT" placeholder="88.50" />
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">💱 Exchange Rate</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <Field name="exchange_rate" label="Fallback Rate (INR per USDT)" placeholder="88.50" />
+          <Field name="rate_markup_percent" label="Live Rate Markup %" placeholder="2" />
+        </div>
+        <p className="text-xs text-gray-400 mt-2">Live rate is fetched automatically. Markup % is added for buy orders, deducted for sell orders.</p>
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">UPI Payment</h3>
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">📱 UPI Payment</h3>
         <Field name="upi_id" label="UPI ID" placeholder="merchant@upi" />
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">Bank Transfer</h3>
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">🏦 Bank Transfer</h3>
         <div className="space-y-3">
           <Field name="bank_account_name" label="Account Holder Name" />
-          <Field name="bank_account_number" label="Account Number" />
-          <Field name="bank_ifsc" label="IFSC Code" />
+          <Field name="bank_account_number" label="Account Number" mono />
+          <Field name="bank_ifsc" label="IFSC Code" mono />
           <Field name="bank_name" label="Bank Name" />
         </div>
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">Support</h3>
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">💼 Our USDT Wallets (for Sell Orders)</h3>
+        <p className="text-xs text-gray-500 mb-3">When users sell USDT, they send it to these wallets. Make sure they are correct.</p>
         <div className="space-y-3">
-          <Field name="support_contact" label="Support Contact (Discord username or link)" placeholder="@yourusername" />
+          <Field name="our_wallet_trc20" label="TRC20 Wallet Address" placeholder="T..." mono />
+          <Field name="our_wallet_bep20" label="BEP20 Wallet Address" placeholder="0x..." mono />
+          <Field name="our_wallet_erc20" label="ERC20 Wallet Address" placeholder="0x..." mono />
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">🛟 Support</h3>
+        <div className="space-y-3">
+          <Field name="support_contact" label="Support Contact" placeholder="@yourusername" />
           <Field name="support_response_hours" label="Response Time (hours)" placeholder="2" />
         </div>
       </section>

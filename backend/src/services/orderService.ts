@@ -138,6 +138,7 @@ export async function getOrdersByDiscordId(discordId: string): Promise<Order[]> 
 
 export interface GetOrdersOptions {
   status?: OrderStatus;
+  search?: string;
   limit?: number;
   offset?: number;
 }
@@ -145,7 +146,7 @@ export interface GetOrdersOptions {
 export async function getOrders(
   opts: GetOrdersOptions = {}
 ): Promise<{ orders: OrderWithUser[]; total: number }> {
-  const { status, limit = 20, offset = 0 } = opts;
+  const { status, search, limit = 20, offset = 0 } = opts;
   const conditions: string[] = [];
   const params: unknown[] = [];
   let paramIdx = 1;
@@ -153,6 +154,14 @@ export async function getOrders(
   if (status) {
     conditions.push(`o.status = $${paramIdx++}`);
     params.push(status);
+  }
+
+  if (search) {
+    conditions.push(
+      `(o.order_ref ILIKE $${paramIdx} OR o.utr_number ILIKE $${paramIdx} OR u.username ILIKE $${paramIdx} OR o.wallet_address ILIKE $${paramIdx})`
+    );
+    params.push(`%${search}%`);
+    paramIdx++;
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -225,11 +234,20 @@ export async function updateOrderStatus(
   return updated;
 }
 
-export async function getStats(): Promise<Record<string, number>> {
-  const { rows } = await query<{ status: string; count: string }>(
-    `SELECT status, COUNT(*) as count FROM orders GROUP BY status`
-  );
-  const stats: Record<string, number> = {
+export async function getStats(): Promise<Record<string, number | string>> {
+  const [{ rows: statusRows }, { rows: volumeRows }] = await Promise.all([
+    query<{ status: string; count: string }>(
+      `SELECT status, COUNT(*) as count FROM orders GROUP BY status`
+    ),
+    query<{ total_inr: string; total_usdt: string }>(
+      `SELECT
+         COALESCE(SUM(inr_amount), 0)::text as total_inr,
+         COALESCE(SUM(usdt_amount), 0)::text as total_usdt
+       FROM orders WHERE status = 'completed'`
+    ),
+  ]);
+
+  const stats: Record<string, number | string> = {
     pending_payment: 0,
     payment_submitted: 0,
     under_review: 0,
@@ -237,8 +255,10 @@ export async function getStats(): Promise<Record<string, number>> {
     rejected: 0,
     usdt_sent: 0,
     completed: 0,
+    total_inr_volume: volumeRows[0]?.total_inr ?? '0',
+    total_usdt_volume: volumeRows[0]?.total_usdt ?? '0',
   };
-  for (const row of rows) {
+  for (const row of statusRows) {
     stats[row.status] = parseInt(row.count, 10);
   }
   return stats;

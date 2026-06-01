@@ -19,6 +19,7 @@ export interface Order {
   network: CryptoNetwork;
   wallet_address: string;
   status: OrderStatus;
+  direction: 'buy' | 'sell';
   utr_number: string | null;
   tx_hash: string | null;
   admin_notes: string | null;
@@ -47,6 +48,8 @@ export interface Stats {
   rejected: number;
   usdt_sent: number;
   completed: number;
+  total_inr_volume?: string;
+  total_usdt_volume?: string;
 }
 
 export interface Settings {
@@ -58,6 +61,10 @@ export interface Settings {
   bank_name: string;
   support_contact: string;
   support_response_hours: string;
+  our_wallet_trc20: string;
+  our_wallet_bep20: string;
+  our_wallet_erc20: string;
+  rate_markup_percent: string;
 }
 
 export interface AdminInfo {

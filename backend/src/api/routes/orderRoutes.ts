@@ -15,9 +15,10 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/', validateQuery(GetOrdersQuerySchema), async (req: AuthRequest, res: Response) => {
-  const { status, limit, offset } = req.query as Record<string, string>;
+  const { status, limit, offset, search } = req.query as Record<string, string>;
   const result = await getOrders({
     status: status as OrderStatus | undefined,
+    search: search?.trim() || undefined,
     limit: parseInt(limit ?? '20', 10),
     offset: parseInt(offset ?? '0', 10),
   });
