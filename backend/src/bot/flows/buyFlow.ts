@@ -5,6 +5,7 @@ import {
   Message,
   ComponentType,
   StringSelectMenuInteraction,
+  CacheType,
 } from 'discord.js';
 import { getSetting } from '../../services/settingsService';
 import { getUserByDiscordId } from '../../services/userService';
@@ -140,7 +141,7 @@ async function runBuyFlow(user: User): Promise<void> {
   let network: string | null = null;
   try {
     const selectInteraction = await dmChannel.awaitMessageComponent({
-      filter: (i): i is StringSelectMenuInteraction =>
+      filter: (i): i is StringSelectMenuInteraction<CacheType> =>
         i.customId === 'network_select' && i.user.id === user.id,
       componentType: ComponentType.StringSelect,
       time: AWAIT_TIMEOUT,
