@@ -107,6 +107,7 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
         .setDescription(
           `Welcome <@${user.id}>!\n\n` +
           `**Current Rate:** ${display} per USDT\n\n` +
+          '📱 **Supported Wallets:** Trust Wallet • Binance Web3 Wallet\n\n' +
           '• You have **2 minutes** to respond at each step.\n' +
           '• Type `cancel` at any time to cancel.\n\n' +
           '**Step 1/6:** How much INR do you want to spend? (e.g. `500`)'
