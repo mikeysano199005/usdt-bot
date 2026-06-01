@@ -163,7 +163,7 @@ async function runSellFlow(user: User, thread: ThreadChannel): Promise<void> {
     return;
   }
 
-  // Step 3: Show our wallet address
+  // Step 3: Show our wallet address — remind user to use supported wallets
   const walletKey = `our_wallet_${network.toLowerCase()}` as const;
   const ourWallet = await getSetting(walletKey) ?? 'NOT_CONFIGURED';
 
@@ -176,7 +176,8 @@ async function runSellFlow(user: User, thread: ThreadChannel): Promise<void> {
           `Send exactly **${usdtAmount} USDT** on the **${network}** network to:\n\n` +
           `\`\`\`${ourWallet}\`\`\`\n` +
           '⚠️ **Send the exact amount.** Wrong amounts or network will cause delays.\n\n' +
-          '**Step 3/6:** After sending, upload a screenshot of the transaction.'
+          '📱 **Supported wallets:** Trust Wallet, Binance Web3 Wallet\n\n' +
+          '**Step 4/6:** After sending, upload a screenshot of the transaction.'
         ),
     ],
   });

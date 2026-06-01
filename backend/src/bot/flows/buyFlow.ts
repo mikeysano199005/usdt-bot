@@ -167,7 +167,7 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
   // Step 3: Wallet address
   const walletAddress = await askWithRetry(
     thread, user.id,
-    `**Step 3/6:** Enter your **${network}** wallet address:`,
+    `**Step 3/6:** Enter your **${network}** wallet address:\n> 📱 Supported wallets: **Trust Wallet**, **Binance Web3 Wallet**`,
     (msg) => {
       const v = msg.content.trim();
       if (v.length < 10) return 'Wallet address too short.';

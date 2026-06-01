@@ -34,6 +34,11 @@ export async function handleSetup(interaction: ChatInputCommandInteraction): Pro
         name: '🔴 Sell USDT (USDT → INR)',
         value: `Rate: **${sellRateData.display}** per USDT\nSend USDT → Receive INR via UPI`,
         inline: true,
+      },
+      {
+        name: '📱 Supported Wallets',
+        value: '✅ **Trust Wallet**\n✅ **Binance Web3 Wallet**',
+        inline: false,
       }
     )
     .setFooter({ text: `Rates update every minute • ${new Date().toLocaleTimeString('en-IN')}` })
