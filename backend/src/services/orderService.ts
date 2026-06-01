@@ -32,8 +32,8 @@ export async function createOrder(data: {
 
   const { rows: [order] } = await query<Order>(
     `INSERT INTO orders
-       (order_ref, user_id, inr_amount, usdt_amount, exchange_rate, network, wallet_address, status, utr_number)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'payment_submitted', $8)
+       (order_ref, user_id, inr_amount, usdt_amount, exchange_rate, network, wallet_address, status, utr_number, direction)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'payment_submitted', $8, 'buy')
      RETURNING *`,
     [
       orderRef,
@@ -44,6 +44,46 @@ export async function createOrder(data: {
       data.network,
       data.walletAddress,
       data.utrNumber,
+    ]
+  );
+
+  await query(
+    `INSERT INTO payment_proofs (order_id, file_path, discord_attachment_url)
+     VALUES ($1, $2, $3)`,
+    [order.id, data.proofFilename, data.discordAttachmentUrl]
+  );
+
+  return order;
+}
+
+export async function createSellOrder(data: {
+  userId: number;
+  usdtAmount: number;
+  inrAmount: number;
+  exchangeRate: number;
+  network: string;
+  walletAddress: string;
+  txHash: string;
+  proofFilename: string;
+  discordAttachmentUrl: string;
+}): Promise<Order> {
+  const orderRef = generateOrderRef();
+
+  const { rows: [order] } = await query<Order>(
+    `INSERT INTO orders
+       (order_ref, user_id, inr_amount, usdt_amount, exchange_rate, network, wallet_address, status, utr_number, tx_hash, direction)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'payment_submitted', $8, $9, 'sell')
+     RETURNING *`,
+    [
+      orderRef,
+      data.userId,
+      data.inrAmount.toFixed(2),
+      data.usdtAmount.toFixed(6),
+      data.exchangeRate.toFixed(4),
+      data.network,
+      data.walletAddress,
+      data.txHash,
+      data.txHash,
     ]
   );
 

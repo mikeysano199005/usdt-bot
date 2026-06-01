@@ -9,9 +9,9 @@ import {
   ChannelType,
 } from 'discord.js';
 import { getSetting } from '../../services/settingsService';
-import { getBuyRate } from '../../services/priceService';
+import { getSellRate } from '../../services/priceService';
 import { getUserByDiscordId } from '../../services/userService';
-import { createOrder } from '../../services/orderService';
+import { createSellOrder } from '../../services/orderService';
 import { saveUploadedFile } from '../../services/fileService';
 import { sendAdminChannelAlert } from '../../services/notificationService';
 import { buildNetworkSelect } from '../components/networkSelect';
@@ -46,7 +46,6 @@ async function askWithRetry(
 
     const msg = await waitForMessage(thread, userId);
     if (!msg) return null;
-
     if (msg.content.trim().toLowerCase() === 'cancel') return 'cancel';
 
     const error = validate(msg);
@@ -57,7 +56,7 @@ async function askWithRetry(
   return null;
 }
 
-export async function startBuyFlow(interaction: ButtonInteraction): Promise<void> {
+export async function startSellFlow(interaction: ButtonInteraction): Promise<void> {
   const user = interaction.user;
 
   if (activeFlows.get(user.id)) {
@@ -75,10 +74,10 @@ export async function startBuyFlow(interaction: ButtonInteraction): Promise<void
   }
 
   const thread = await (channel as TextChannel).threads.create({
-    name: `buy-${user.username}-${Date.now().toString().slice(-4)}`,
+    name: `sell-${user.username}-${Date.now().toString().slice(-4)}`,
     autoArchiveDuration: 1440,
     type: ChannelType.PrivateThread,
-    reason: `Buy USDT order for ${user.username}`,
+    reason: `Sell USDT order for ${user.username}`,
   });
 
   await thread.members.add(user.id);
@@ -90,61 +89,61 @@ export async function startBuyFlow(interaction: ButtonInteraction): Promise<void
 
   activeFlows.set(user.id, true);
   try {
-    await runBuyFlow(user, thread);
+    await runSellFlow(user, thread);
   } finally {
     activeFlows.delete(user.id);
   }
 }
 
-async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
-  const { rate, display } = await getBuyRate();
+async function runSellFlow(user: User, thread: ThreadChannel): Promise<void> {
+  const { rate, display } = await getSellRate();
 
   await thread.send({
     embeds: [
       new EmbedBuilder()
-        .setTitle('💰 Buy USDT — INR → USDT')
-        .setColor(0x5865f2)
+        .setTitle('💵 Sell USDT — USDT → INR')
+        .setColor(0xf59e0b)
         .setDescription(
           `Welcome <@${user.id}>!\n\n` +
           `**Current Rate:** ${display} per USDT\n\n` +
           '• You have **2 minutes** to respond at each step.\n' +
           '• Type `cancel` at any time to cancel.\n\n' +
-          '**Step 1/6:** How much INR do you want to spend? (e.g. `500`)'
+          '**Step 1/6:** How much USDT do you want to sell? (e.g. `10`)'
         ),
     ],
   });
 
-  // Step 1: INR amount
-  const inrStr = await askWithRetry(
+  // Step 1: USDT amount
+  const usdtStr = await askWithRetry(
     thread, user.id,
-    '**Step 1/6:** Enter the INR amount:',
+    '**Step 1/6:** Enter the USDT amount you want to sell:',
     (msg) => {
       const n = parseFloat(msg.content.trim());
       if (isNaN(n) || n <= 0) return 'Please enter a valid positive number.';
-      if (n < 100) return 'Minimum order is ₹100.';
-      if (n > 1_000_000) return 'Maximum order is ₹10,00,000.';
+      if (n < 1) return 'Minimum sell is 1 USDT.';
+      if (n > 10000) return 'Maximum sell is 10,000 USDT.';
       return null;
     }
   );
 
-  if (!inrStr || inrStr === 'cancel') {
+  if (!usdtStr || usdtStr === 'cancel') {
     await thread.send('❌ Order cancelled. This ticket will archive shortly.');
     return;
   }
 
-  const inrAmount = parseFloat(inrStr);
-  const usdtAmount = (inrAmount / rate).toFixed(6);
+  const usdtAmount = parseFloat(usdtStr);
+  const inrAmount = (usdtAmount * rate).toFixed(2);
 
   await thread.send({
     embeds: [
       new EmbedBuilder()
         .setColor(0x10b981)
         .addFields(
-          { name: '💵 You Pay', value: `₹${inrAmount}`, inline: true },
-          { name: '📦 You Receive', value: `${usdtAmount} USDT`, inline: true },
+          { name: '📦 You Send', value: `${usdtAmount} USDT`, inline: true },
+          { name: '💵 You Receive', value: `₹${inrAmount}`, inline: true },
           { name: '📈 Rate', value: display, inline: true },
         )
-        .setDescription('**Step 2/6:** Select the network to receive your USDT:'),
+        .setDescription('**Step 2/6:** Select the network you will send USDT from:'),
     ],
     components: [buildNetworkSelect()],
   });
@@ -160,57 +159,32 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
     network = selectInteraction.values[0];
     await selectInteraction.update({ content: `✅ Network: **${network}**`, components: [], embeds: [] });
   } catch {
-    await thread.send('❌ Session timed out. Please use the Buy button again.');
+    await thread.send('❌ Session timed out. Please use the Sell button again.');
     return;
   }
 
-  // Step 3: Wallet address
-  const walletAddress = await askWithRetry(
-    thread, user.id,
-    `**Step 3/6:** Enter your **${network}** wallet address:`,
-    (msg) => {
-      const v = msg.content.trim();
-      if (v.length < 10) return 'Wallet address too short.';
-      if (v.length > 200) return 'Wallet address too long.';
-      if (!/^[a-zA-Z0-9]+$/.test(v)) return 'Invalid characters in wallet address.';
-      return null;
-    }
-  );
-
-  if (!walletAddress || walletAddress === 'cancel') {
-    await thread.send('❌ Order cancelled.');
-    return;
-  }
-
-  // Step 4: Payment instructions
-  const [upiId, bankName, bankAccountName, bankAccountNumber, bankIfsc] = await Promise.all([
-    getSetting('upi_id'),
-    getSetting('bank_name'),
-    getSetting('bank_account_name'),
-    getSetting('bank_account_number'),
-    getSetting('bank_ifsc'),
-  ]);
+  // Step 3: Show our wallet address
+  const walletKey = `our_wallet_${network.toLowerCase()}` as const;
+  const ourWallet = await getSetting(walletKey) ?? 'NOT_CONFIGURED';
 
   await thread.send({
     embeds: [
       new EmbedBuilder()
-        .setTitle('🏦 Payment Instructions')
+        .setTitle(`📤 Send USDT (${network})`)
         .setColor(0xf59e0b)
-        .setDescription('Pay the exact amount using UPI or bank transfer:')
-        .addFields(
-          { name: '📱 UPI ID', value: `\`${upiId}\``, inline: true },
-          { name: '💵 Exact Amount', value: `**₹${inrAmount}**`, inline: true },
-          { name: '​', value: '​', inline: true },
-          { name: '🏦 Bank Transfer', value: `**Bank:** ${bankName}\n**Name:** ${bankAccountName}\n**Account:** \`${bankAccountNumber}\`\n**IFSC:** \`${bankIfsc}\`` }
-        )
-        .setFooter({ text: 'Step 4/6: After paying, upload a screenshot of your payment.' }),
+        .setDescription(
+          `Send exactly **${usdtAmount} USDT** on the **${network}** network to:\n\n` +
+          `\`\`\`${ourWallet}\`\`\`\n` +
+          '⚠️ **Send the exact amount.** Wrong amounts or network will cause delays.\n\n' +
+          '**Step 3/6:** After sending, upload a screenshot of the transaction.'
+        ),
     ],
   });
 
-  // Step 5: Screenshot
+  // Step 4: Screenshot of USDT transfer
   let screenshotUrl: string | null = null;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > 0) await thread.send('**Step 5/6:** Please upload your payment screenshot:');
+    if (attempt > 0) await thread.send('**Step 4/6:** Upload a screenshot of your USDT transfer:');
 
     const msg = await waitForMessage(thread, user.id);
     if (!msg) { await thread.send('❌ Session timed out.'); return; }
@@ -233,20 +207,36 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
     return;
   }
 
-  // Step 6: UTR
-  const utrNumber = await askWithRetry(
+  // Step 5: TX Hash
+  const txHash = await askWithRetry(
     thread, user.id,
-    '**Step 6/6:** Enter your **UTR / Reference Number** from the payment:',
+    '**Step 5/6:** Enter the **Transaction Hash / TX ID** from your wallet:',
     (msg) => {
       const v = msg.content.trim();
-      if (v.length < 4) return 'UTR number too short.';
-      if (v.length > 50) return 'UTR number too long.';
-      if (!/^[a-zA-Z0-9]+$/.test(v)) return 'UTR should only contain letters and numbers.';
+      if (v.length < 10) return 'TX hash too short.';
+      if (v.length > 150) return 'TX hash too long.';
       return null;
     }
   );
 
-  if (!utrNumber || utrNumber === 'cancel') {
+  if (!txHash || txHash === 'cancel') {
+    await thread.send('❌ Order cancelled.');
+    return;
+  }
+
+  // Step 6: UPI ID to receive INR
+  const upiId = await askWithRetry(
+    thread, user.id,
+    '**Step 6/6:** Enter your **UPI ID** where you want to receive ₹' + inrAmount + ':',
+    (msg) => {
+      const v = msg.content.trim();
+      if (v.length < 3) return 'UPI ID too short.';
+      if (v.length > 100) return 'UPI ID too long.';
+      return null;
+    }
+  );
+
+  if (!upiId || upiId === 'cancel') {
     await thread.send('❌ Order cancelled.');
     return;
   }
@@ -258,7 +248,7 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
 
   let proofFilename: string;
   try {
-    proofFilename = await saveUploadedFile(screenshotUrl, `user_${dbUser.id}_tmp`);
+    proofFilename = await saveUploadedFile(screenshotUrl, `user_${dbUser.id}_sell_tmp`);
   } catch {
     await thread.send('❌ Failed to save screenshot. Please contact support.');
     return;
@@ -266,12 +256,14 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
 
   let order;
   try {
-    order = await createOrder({
+    order = await createSellOrder({
       userId: dbUser.id,
-      inrAmount,
+      usdtAmount,
+      inrAmount: parseFloat(inrAmount),
+      exchangeRate: rate,
       network,
-      walletAddress,
-      utrNumber,
+      walletAddress: upiId,
+      txHash,
       proofFilename,
       discordAttachmentUrl: screenshotUrl,
     });
@@ -283,16 +275,17 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
   await thread.send({
     embeds: [
       new EmbedBuilder()
-        .setTitle('✅ Order Submitted!')
+        .setTitle('✅ Sell Order Submitted!')
         .setColor(0x10b981)
         .addFields(
           { name: 'Order Ref', value: `**${order.order_ref}**`, inline: true },
-          { name: 'Amount', value: `₹${inrAmount} → ${usdtAmount} USDT`, inline: true },
+          { name: 'Amount', value: `${usdtAmount} USDT → ₹${inrAmount}`, inline: true },
           { name: 'Network', value: network, inline: true },
+          { name: 'Payout UPI', value: upiId, inline: true },
           { name: 'Status', value: '🔍 Under Review', inline: true },
         )
         .setDescription(
-          'Your order is being reviewed. You\'ll be notified here when the status changes.\n\n' +
+          'Your sell order is being reviewed. You\'ll be notified here once the INR is sent to your UPI.\n\n' +
           'Use `/support` if you need help.'
         )
         .setFooter({ text: 'Typical processing time: 1-2 hours' }),

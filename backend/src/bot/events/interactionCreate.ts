@@ -3,9 +3,10 @@ import { handleBuy } from '../commands/buy';
 import { handleStatus } from '../commands/status';
 import { handleSupport } from '../commands/support';
 import { handleHelp } from '../commands/help';
+import { handleSetup } from '../commands/setup';
 import { startBuyFlow } from '../flows/buyFlow';
+import { startSellFlow } from '../flows/sellFlow';
 import { upsertUser } from '../../services/userService';
-import { getOrdersByDiscordId } from '../../services/orderService';
 
 const rateLimitMap = new Map<string, number[]>();
 
@@ -32,18 +33,11 @@ export function registerInteractionCreate(client: Client): void {
     if (interaction.isChatInputCommand()) {
       try {
         switch (interaction.commandName) {
-          case 'buy':
-            await handleBuy(interaction);
-            break;
-          case 'status':
-            await handleStatus(interaction);
-            break;
-          case 'support':
-            await handleSupport(interaction);
-            break;
-          case 'help':
-            await handleHelp(interaction);
-            break;
+          case 'buy':    await handleBuy(interaction); break;
+          case 'status': await handleStatus(interaction); break;
+          case 'support': await handleSupport(interaction); break;
+          case 'help':   await handleHelp(interaction); break;
+          case 'setup':  await handleSetup(interaction); break;
           default:
             await interaction.reply({ content: 'Unknown command.', ephemeral: true });
         }
@@ -59,28 +53,28 @@ export function registerInteractionCreate(client: Client): void {
     }
 
     if (interaction.isButton()) {
-      if (interaction.customId === 'start_buy') {
-        await upsertUser({
-          discordId: interaction.user.id,
-          username: interaction.user.username,
-          displayName: interaction.user.displayName,
-        });
-        await interaction.reply({
-          content: '📩 Check your **DMs** to start your purchase!',
-          ephemeral: true,
-        });
-        await startBuyFlow(interaction.user);
-      }
+      try {
+        if (interaction.customId === 'flow_buy') {
+          await upsertUser({
+            discordId: interaction.user.id,
+            username: interaction.user.username,
+            displayName: interaction.user.displayName,
+          });
+          await startBuyFlow(interaction);
+        }
 
-      if (interaction.customId === 'check_status') {
-        const orders = await getOrdersByDiscordId(interaction.user.id);
-        if (orders.length === 0) {
-          await interaction.reply({ content: 'You have no orders yet.', ephemeral: true });
-        } else {
-          const lines = orders
-            .slice(0, 5)
-            .map((o) => `• **${o.order_ref}** — ${o.status.replace(/_/g, ' ')} — ₹${o.inr_amount}`);
-          await interaction.reply({ content: lines.join('\n'), ephemeral: true });
+        if (interaction.customId === 'flow_sell') {
+          await upsertUser({
+            discordId: interaction.user.id,
+            username: interaction.user.username,
+            displayName: interaction.user.displayName,
+          });
+          await startSellFlow(interaction);
+        }
+      } catch (err) {
+        console.error('[Bot] Button error:', err);
+        if (!interaction.replied) {
+          await interaction.reply({ content: '❌ Something went wrong.', ephemeral: true }).catch(() => {});
         }
       }
     }

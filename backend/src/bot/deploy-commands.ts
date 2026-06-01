@@ -14,6 +14,9 @@ const commands = [
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('Show available commands and how to use the bot'),
+  new SlashCommandBuilder()
+    .setName('setup')
+    .setDescription('Post the USDT exchange rate message with Buy/Sell buttons (admin only)'),
 ].map((cmd) => cmd.toJSON());
 
 export async function deployCommands(): Promise<void> {
