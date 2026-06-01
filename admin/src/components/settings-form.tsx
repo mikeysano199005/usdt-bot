@@ -85,12 +85,16 @@ export function SettingsForm({ settings, onSaved }: SettingsFormProps) {
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">💼 Our USDT Wallets (for Sell Orders)</h3>
-        <p className="text-xs text-gray-500 mb-3">When users sell USDT, they send it to these wallets. Make sure they are correct.</p>
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-1">💼 Our USDT Wallets (for Sell Orders)</h3>
+        <p className="text-xs text-gray-500 mb-1">When users sell USDT, they send it to these wallets. Make sure they are correct.</p>
+        <div className="flex gap-2 mb-3">
+          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2 py-1 rounded-full border border-blue-100">✅ Trust Wallet</span>
+          <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 text-xs font-medium px-2 py-1 rounded-full border border-yellow-100">✅ Binance Web3 Wallet</span>
+        </div>
         <div className="space-y-3">
-          <Field name="our_wallet_trc20" label="TRC20 Wallet Address" placeholder="T..." mono />
-          <Field name="our_wallet_bep20" label="BEP20 Wallet Address" placeholder="0x..." mono />
-          <Field name="our_wallet_erc20" label="ERC20 Wallet Address" placeholder="0x..." mono />
+          <Field name="our_wallet_trc20" label="TRC20 Wallet Address (Trust Wallet / Binance Web3)" placeholder="T..." mono />
+          <Field name="our_wallet_bep20" label="BEP20 Wallet Address (Trust Wallet / Binance Web3)" placeholder="0x..." mono />
+          <Field name="our_wallet_erc20" label="ERC20 Wallet Address (Trust Wallet / Binance Web3)" placeholder="0x..." mono />
         </div>
       </section>
 
