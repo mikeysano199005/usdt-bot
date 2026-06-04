@@ -1,12 +1,10 @@
 import {
   User,
   EmbedBuilder,
-  ThreadChannel,
   Message,
   ComponentType,
   ButtonInteraction,
   TextChannel,
-  ChannelType,
 } from 'discord.js';
 import { getSetting } from '../../services/settingsService';
 import { getBuyRate } from '../../services/priceService';
@@ -15,12 +13,13 @@ import { createOrder } from '../../services/orderService';
 import { saveUploadedFile } from '../../services/fileService';
 import { sendAdminChannelAlert } from '../../services/notificationService';
 import { buildNetworkSelect } from '../components/networkSelect';
+import { createTicketChannel, buildCloseButton } from './ticketUtils';
 
 const activeFlows = new Map<string, boolean>();
 const AWAIT_TIMEOUT = 120_000;
 const MAX_RETRIES = 3;
 
-async function waitForMessage(thread: ThreadChannel, userId: string): Promise<Message | null> {
+async function waitForMessage(thread: TextChannel, userId: string): Promise<Message | null> {
   try {
     const collected = await thread.awaitMessages({
       filter: (m) => m.author.id === userId,
@@ -35,7 +34,7 @@ async function waitForMessage(thread: ThreadChannel, userId: string): Promise<Me
 }
 
 async function askWithRetry(
-  thread: ThreadChannel,
+  thread: TextChannel,
   userId: string,
   prompt: string,
   validate: (msg: Message) => string | null
@@ -68,35 +67,25 @@ export async function startBuyFlow(interaction: ButtonInteraction): Promise<void
     return;
   }
 
-  const channel = interaction.channel;
-  if (!channel || channel.type !== ChannelType.GuildText) {
-    await interaction.reply({ content: '❌ This only works in a server text channel.', ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
+
+  const ticket = await createTicketChannel(interaction, 'buy');
+  if (!ticket) {
+    await interaction.editReply('❌ Could not create your ticket. Please make sure the bot has **Manage Channels** permission.');
     return;
   }
 
-  const thread = await (channel as TextChannel).threads.create({
-    name: `buy-${user.username}-${Date.now().toString().slice(-4)}`,
-    autoArchiveDuration: 1440,
-    type: ChannelType.PrivateThread,
-    reason: `Buy USDT order for ${user.username}`,
-  });
-
-  await thread.members.add(user.id);
-
-  await interaction.reply({
-    content: `✅ Your order ticket has been created: ${thread}`,
-    ephemeral: true,
-  });
+  await interaction.editReply(`✅ Your order ticket has been created: ${ticket}`);
 
   activeFlows.set(user.id, true);
   try {
-    await runBuyFlow(user, thread);
+    await runBuyFlow(user, ticket);
   } finally {
     activeFlows.delete(user.id);
   }
 }
 
-async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
+async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
   const { rate, display } = await getBuyRate();
 
   await thread.send({
@@ -294,10 +283,11 @@ async function runBuyFlow(user: User, thread: ThreadChannel): Promise<void> {
         )
         .setDescription(
           'Your order is being reviewed. You\'ll be notified here when the status changes.\n\n' +
-          'Use `/support` if you need help.'
+          'Use `/support` if you need help. Click **Close Ticket** below once you\'re done.'
         )
         .setFooter({ text: 'Typical processing time: 1-2 hours' }),
     ],
+    components: [buildCloseButton()],
   });
 
   await sendAdminChannelAlert(order, `${user.username} (${user.id})`);

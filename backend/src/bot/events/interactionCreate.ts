@@ -54,6 +54,19 @@ export function registerInteractionCreate(client: Client): void {
 
     if (interaction.isButton()) {
       try {
+        if (interaction.customId === 'close_ticket') {
+          await interaction.reply({ content: '🔒 Closing this ticket in 5 seconds...' });
+          const channel = interaction.channel;
+          setTimeout(() => {
+            if (channel && 'delete' in channel) {
+              (channel as { delete: (reason?: string) => Promise<unknown> })
+                .delete('Ticket closed by user')
+                .catch(() => {});
+            }
+          }, 5000);
+          return;
+        }
+
         if (interaction.customId === 'flow_buy') {
           await upsertUser({
             discordId: interaction.user.id,
