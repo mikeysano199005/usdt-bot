@@ -19,17 +19,28 @@ async function main(): Promise<void> {
     console.log(`[API] Listening on port ${config.port}`);
   });
 
-  await deployCommands();
+  // Start the Discord bot separately so a bad token / Discord outage
+  // never takes down the Express API (admin panel login depends on it).
+  startBot().catch((err) => {
+    console.error('[Bot] Bot failed to start (API still running):', err);
+  });
 
+  console.log('[App] Ready');
+}
+
+async function startBot(): Promise<void> {
   registerReadyEvent(client);
   registerInteractionCreate(client);
   registerMessageCreate(client);
 
   await client.login(config.discord.botToken);
-
   setClient(client);
 
-  console.log('[App] Ready');
+  try {
+    await deployCommands();
+  } catch (err) {
+    console.error('[Bot] Failed to register slash commands:', err);
+  }
 }
 
 main().catch((err) => {
