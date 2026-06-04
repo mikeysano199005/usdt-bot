@@ -1,8 +1,6 @@
 import {
   User,
   EmbedBuilder,
-  Message,
-  ComponentType,
   ButtonInteraction,
   TextChannel,
 } from 'discord.js';
@@ -14,46 +12,9 @@ import { saveUploadedFile } from '../../services/fileService';
 import { sendAdminChannelAlert } from '../../services/notificationService';
 import { buildNetworkSelect } from '../components/networkSelect';
 import { createTicketChannel, buildCloseButton } from './ticketUtils';
+import { askWithRetry, askForScreenshot, buildCancelRow, AWAIT_TIMEOUT } from './flowHelpers';
 
 const activeFlows = new Map<string, boolean>();
-const AWAIT_TIMEOUT = 120_000;
-const MAX_RETRIES = 3;
-
-async function waitForMessage(thread: TextChannel, userId: string): Promise<Message | null> {
-  try {
-    const collected = await thread.awaitMessages({
-      filter: (m) => m.author.id === userId,
-      max: 1,
-      time: AWAIT_TIMEOUT,
-      errors: ['time'],
-    });
-    return collected.first() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function askWithRetry(
-  thread: TextChannel,
-  userId: string,
-  prompt: string,
-  validate: (msg: Message) => string | null
-): Promise<string | null> {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > 0) await thread.send(prompt);
-    else await thread.send(prompt);
-
-    const msg = await waitForMessage(thread, userId);
-    if (!msg) return null;
-    if (msg.content.trim().toLowerCase() === 'cancel') return 'cancel';
-
-    const error = validate(msg);
-    if (!error) return msg.content.trim();
-
-    await thread.send(`❌ ${error} Please try again.`);
-  }
-  return null;
-}
 
 export async function startSellFlow(interaction: ButtonInteraction): Promise<void> {
   const user = interaction.user;
@@ -97,7 +58,7 @@ async function runSellFlow(user: User, thread: TextChannel): Promise<void> {
           `**Current Rate:** ${display} per USDT\n\n` +
           '📱 **Supported Wallets:** Trust Wallet • Binance Web3 Wallet\n\n' +
           '• You have **2 minutes** to respond at each step.\n' +
-          '• Type `cancel` at any time to cancel.\n\n' +
+          '• Click the **❌ Cancel Order** button under any step to stop.\n\n' +
           '**Step 1/6:** How much USDT do you want to sell? (e.g. `10`)'
         ),
     ],
@@ -117,7 +78,7 @@ async function runSellFlow(user: User, thread: TextChannel): Promise<void> {
   );
 
   if (!usdtStr || usdtStr === 'cancel') {
-    await thread.send('❌ Order cancelled. This ticket will archive shortly.');
+    await thread.send('❌ Order cancelled. You can close this ticket.');
     return;
   }
 
@@ -135,25 +96,30 @@ async function runSellFlow(user: User, thread: TextChannel): Promise<void> {
         )
         .setDescription('**Step 2/6:** Select the network you will send USDT from:'),
     ],
-    components: [buildNetworkSelect()],
+    components: [buildNetworkSelect(), buildCancelRow()],
   });
 
-  // Step 2: Network
+  // Step 2: Network (or cancel)
   let network: string;
   try {
-    const selectInteraction = await thread.awaitMessageComponent({
-      filter: (i) => i.customId === 'network_select' && i.user.id === user.id,
-      componentType: ComponentType.StringSelect,
+    const compInteraction = await thread.awaitMessageComponent({
+      filter: (i) => i.user.id === user.id && (i.customId === 'network_select' || i.customId === 'cancel_flow'),
       time: AWAIT_TIMEOUT,
     });
-    network = selectInteraction.values[0];
-    await selectInteraction.update({ content: `✅ Network: **${network}**`, components: [], embeds: [] });
+
+    if (compInteraction.customId === 'cancel_flow') {
+      await compInteraction.update({ content: '❌ Order cancelled. You can close this ticket.', components: [], embeds: [] });
+      return;
+    }
+
+    network = compInteraction.isStringSelectMenu() ? compInteraction.values[0] : 'BEP20';
+    await compInteraction.update({ content: `✅ Network: **${network}**`, components: [], embeds: [] });
   } catch {
     await thread.send('❌ Session timed out. Please use the Sell button again.');
     return;
   }
 
-  // Step 3: Show our wallet address — remind user to use supported wallets
+  // Step 3: Show our wallet address
   const walletKey = `our_wallet_${network.toLowerCase()}` as const;
   const ourWallet = await getSetting(walletKey) ?? 'NOT_CONFIGURED';
 
@@ -173,28 +139,13 @@ async function runSellFlow(user: User, thread: TextChannel): Promise<void> {
   });
 
   // Step 4: Screenshot of USDT transfer
-  let screenshotUrl: string | null = null;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > 0) await thread.send('**Step 4/6:** Upload a screenshot of your USDT transfer:');
+  const screenshotUrl = await askForScreenshot(
+    thread, user.id,
+    '**Step 4/6:** Upload a screenshot of your USDT transfer (jpg/png/webp):'
+  );
 
-    const msg = await waitForMessage(thread, user.id);
-    if (!msg) { await thread.send('❌ Session timed out.'); return; }
-    if (msg.content.toLowerCase() === 'cancel') { await thread.send('❌ Cancelled.'); return; }
-
-    const attachment = msg.attachments.first();
-    if (!attachment) { await thread.send('❌ No file attached. Please upload an image.'); continue; }
-
-    const ext = attachment.name?.split('.').pop()?.toLowerCase() ?? '';
-    if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
-      await thread.send('❌ Only jpg, jpeg, png, webp files allowed.'); continue;
-    }
-
-    screenshotUrl = attachment.url;
-    break;
-  }
-
-  if (!screenshotUrl) {
-    await thread.send('❌ Too many invalid attempts. Please restart.');
+  if (!screenshotUrl || screenshotUrl === 'cancel') {
+    await thread.send('❌ Order cancelled. You can close this ticket.');
     return;
   }
 
@@ -211,7 +162,7 @@ async function runSellFlow(user: User, thread: TextChannel): Promise<void> {
   );
 
   if (!txHash || txHash === 'cancel') {
-    await thread.send('❌ Order cancelled.');
+    await thread.send('❌ Order cancelled. You can close this ticket.');
     return;
   }
 
@@ -228,7 +179,7 @@ async function runSellFlow(user: User, thread: TextChannel): Promise<void> {
   );
 
   if (!upiId || upiId === 'cancel') {
-    await thread.send('❌ Order cancelled.');
+    await thread.send('❌ Order cancelled. You can close this ticket.');
     return;
   }
 
