@@ -14,6 +14,7 @@ import { saveUploadedFile } from '../../services/fileService';
 import { sendAdminChannelAlert } from '../../services/notificationService';
 import { buildNetworkSelect } from '../components/networkSelect';
 import { createTicketChannel, buildCloseButton } from './ticketUtils';
+import { cleanWalletInput, isValidBep20Address } from './walletValidation';
 
 const activeFlows = new Map<string, boolean>();
 const AWAIT_TIMEOUT = 120_000;
@@ -154,23 +155,26 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
     return;
   }
 
-  // Step 3: Wallet address
-  const walletAddress = await askWithRetry(
+  // Step 3: Wallet address (BEP20 = 0x + 40 hex chars)
+  const walletRaw = await askWithRetry(
     thread, user.id,
-    `**Step 3/6:** Enter your **${network}** wallet address:\n> 📱 Supported wallets: **Trust Wallet**, **Binance Web3 Wallet**`,
+    `**Step 3/6:** Enter your **${network}** wallet address (starts with \`0x\`):\n> 📱 Supported wallets: **Trust Wallet**, **Binance Web3 Wallet**`,
     (msg) => {
-      const v = msg.content.trim();
-      if (v.length < 10) return 'Wallet address too short.';
-      if (v.length > 200) return 'Wallet address too long.';
-      if (!/^[a-zA-Z0-9]+$/.test(v)) return 'Invalid characters in wallet address.';
+      const v = cleanWalletInput(msg.content);
+      if (!isValidBep20Address(v)) {
+        return 'That doesn\'t look like a valid BEP20 wallet address. It should start with `0x` and be 42 characters long.';
+      }
       return null;
     }
   );
 
-  if (!walletAddress || walletAddress === 'cancel') {
+  if (!walletRaw || walletRaw === 'cancel') {
     await thread.send('❌ Order cancelled.');
     return;
   }
+
+  // store the cleaned address (no stray invisible characters)
+  const walletAddress = cleanWalletInput(walletRaw);
 
   // Step 4: Payment instructions
   const [upiId, bankName, bankAccountName, bankAccountNumber, bankIfsc] = await Promise.all([
