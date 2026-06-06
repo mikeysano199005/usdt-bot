@@ -38,6 +38,19 @@ export async function sendAdminChannelAlert(
   }
 }
 
+/** Sends a plain-text message to the admin channel (used by the bank-SMS matcher). */
+export async function sendAdminBankAlert(message: string): Promise<void> {
+  if (!discordClient) return;
+
+  try {
+    const channel = await discordClient.channels.fetch(config.discord.adminChannelId);
+    if (!channel || !(channel instanceof TextChannel)) return;
+    await channel.send(message);
+  } catch {
+    console.error('[Notification] Failed to send bank alert');
+  }
+}
+
 export async function sendUserDM(
   discordUserId: string,
   message: string

@@ -21,7 +21,7 @@ export async function createOrder(data: {
   inrAmount: number;
   network: string;
   walletAddress: string;
-  utrNumber: string;
+  utrNumber?: string | null;
   proofFilename: string;
   discordAttachmentUrl: string;
 }): Promise<Order> {
@@ -43,7 +43,7 @@ export async function createOrder(data: {
       rate.toFixed(4),
       data.network,
       data.walletAddress,
-      data.utrNumber,
+      data.utrNumber ?? null,
     ]
   );
 
@@ -232,6 +232,92 @@ export async function updateOrderStatus(
   );
 
   return updated;
+}
+
+// Statuses that count as "in flight" — used to keep unique paid amounts distinct.
+const ACTIVE_STATUSES: OrderStatus[] = [
+  'pending_payment',
+  'payment_submitted',
+  'under_review',
+];
+
+/**
+ * Returns a payable INR amount equal to the base rupees plus a unique paise
+ * suffix (e.g. 500 -> 500.37). Because this bank's SMS carries no UTR, the exact
+ * amount is the only way to match an incoming credit to one specific order, so we
+ * guarantee no other in-flight order shares the same amount.
+ */
+export async function generateUniqueInrAmount(baseAmount: number): Promise<number> {
+  const baseRupees = Math.floor(baseAmount);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const paise = Math.floor(Math.random() * 99) + 1; // 1..99
+    const candidate = parseFloat((baseRupees + paise / 100).toFixed(2));
+    const { rows } = await query(
+      `SELECT 1 FROM orders
+       WHERE inr_amount = $1::numeric
+         AND status = ANY($2)
+         AND created_at > NOW() - INTERVAL '24 hours'
+       LIMIT 1`,
+      [candidate.toFixed(2), ACTIVE_STATUSES]
+    );
+    if (rows.length === 0) return candidate;
+  }
+  // Extremely unlikely fallback (50 collisions in a day).
+  const paise = Math.floor(Math.random() * 99) + 1;
+  return parseFloat((baseRupees + paise / 100).toFixed(2));
+}
+
+let systemAdminIdCache: number | null = null;
+
+/** Id of the non-loginable 'system' admin the automated matcher acts as. */
+export async function getSystemAdminId(): Promise<number> {
+  if (systemAdminIdCache !== null) return systemAdminIdCache;
+  const { rows } = await query<{ id: number }>(
+    `SELECT id FROM admin_users WHERE username = 'system' LIMIT 1`
+  );
+  if (rows.length === 0) {
+    throw new Error("system admin user not found (run DB migrations)");
+  }
+  systemAdminIdCache = rows[0].id;
+  return systemAdminIdCache;
+}
+
+export type CreditMatchResult =
+  | { status: 'matched'; order: OrderWithUser }
+  | { status: 'none' }
+  | { status: 'ambiguous'; count: number };
+
+/**
+ * Finds the single pending buy order whose exact INR amount equals an incoming
+ * bank credit. Ambiguous (>1) and no-match are reported so a human can resolve.
+ */
+export async function matchCreditToOrder(amount: number): Promise<CreditMatchResult> {
+  const { rows } = await query<{ id: number }>(
+    `SELECT id FROM orders
+     WHERE direction = 'buy'
+       AND status = 'payment_submitted'
+       AND inr_amount = $1::numeric
+       AND created_at > NOW() - INTERVAL '24 hours'
+     ORDER BY created_at ASC`,
+    [amount.toFixed(2)]
+  );
+  if (rows.length === 0) return { status: 'none' };
+  if (rows.length > 1) return { status: 'ambiguous', count: rows.length };
+
+  const order = await getOrderById(rows[0].id);
+  return order ? { status: 'matched', order } : { status: 'none' };
+}
+
+/**
+ * Advances a matched order to 'under_review' attributed to the system admin.
+ * The irreversible USDT release stays a manual admin action.
+ */
+export async function markOrderPaymentVerified(
+  orderId: number,
+  note: string
+): Promise<Order> {
+  const adminId = await getSystemAdminId();
+  return updateOrderStatus(orderId, 'under_review', adminId, { notes: note });
 }
 
 export async function getStats(): Promise<Record<string, number | string>> {

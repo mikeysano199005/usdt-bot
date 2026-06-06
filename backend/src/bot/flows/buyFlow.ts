@@ -8,7 +8,7 @@ import {
 import { getSetting } from '../../services/settingsService';
 import { getBuyRate } from '../../services/priceService';
 import { getUserByDiscordId } from '../../services/userService';
-import { createOrder } from '../../services/orderService';
+import { createOrder, generateUniqueInrAmount } from '../../services/orderService';
 import { saveUploadedFile } from '../../services/fileService';
 import { sendAdminChannelAlert } from '../../services/notificationService';
 import { buildNetworkSelect } from '../components/networkSelect';
@@ -61,7 +61,7 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
           '📱 **Supported Wallets:** Trust Wallet • Binance Web3 Wallet\n\n' +
           '• You have **2 minutes** to respond at each step.\n' +
           '• Click the **❌ Cancel Order** button under any step to stop.\n\n' +
-          '**Step 1/6:** How much INR do you want to spend? (e.g. `500`)'
+          '**Step 1/5:** How much INR do you want to spend? (e.g. `500`)'
         ),
     ],
   });
@@ -69,7 +69,7 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
   // Step 1: INR amount
   const inrStr = await askWithRetry(
     thread, user.id,
-    '**Step 1/6:** Enter the INR amount:',
+    '**Step 1/5:** Enter the INR amount:',
     (msg) => {
       const n = parseFloat(msg.content.trim());
       if (isNaN(n) || n <= 0) return 'Please enter a valid positive number.';
@@ -84,7 +84,9 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
     return;
   }
 
-  const inrAmount = parseFloat(inrStr);
+  // Give each order a unique paise amount so an incoming bank credit can be
+  // matched to exactly one order (this bank's payment SMS carries no UTR).
+  const inrAmount = await generateUniqueInrAmount(parseFloat(inrStr));
   const usdtAmount = (inrAmount / rate).toFixed(6);
 
   await thread.send({
@@ -92,11 +94,11 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
       new EmbedBuilder()
         .setColor(0x10b981)
         .addFields(
-          { name: '💵 You Pay', value: `₹${inrAmount}`, inline: true },
+          { name: '💵 You Pay', value: `₹${inrAmount.toFixed(2)}`, inline: true },
           { name: '📦 You Receive', value: `${usdtAmount} USDT`, inline: true },
           { name: '📈 Rate', value: display, inline: true },
         )
-        .setDescription('**Step 2/6:** Select the network to receive your USDT:'),
+        .setDescription('**Step 2/5:** Select the network to receive your USDT:'),
     ],
     components: [buildNetworkSelect(), buildCancelRow()],
   });
@@ -124,7 +126,7 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
   // Step 3: Wallet address (BEP20 = 0x + 40 hex chars)
   const walletRaw = await askWithRetry(
     thread, user.id,
-    `**Step 3/6:** Enter your **${network}** wallet address (starts with \`0x\`):\n> 📱 Supported wallets: **Trust Wallet**, **Binance Web3 Wallet**`,
+    `**Step 3/5:** Enter your **${network}** wallet address (starts with \`0x\`):\n> 📱 Supported wallets: **Trust Wallet**, **Binance Web3 Wallet**`,
     (msg) => {
       const v = cleanWalletInput(msg.content);
       if (!isValidBep20Address(v)) {
@@ -155,42 +157,28 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
       new EmbedBuilder()
         .setTitle('🏦 Payment Instructions')
         .setColor(0xf59e0b)
-        .setDescription('Pay the exact amount using UPI or bank transfer:')
+        .setDescription(
+          '⚠️ **Pay the EXACT amount below — including the paise.**\n' +
+          'The paise are unique to your order and are how we auto-detect your payment. ' +
+          'Paying a rounded amount will delay verification.'
+        )
         .addFields(
           { name: '📱 UPI ID', value: `\`${upiId}\``, inline: true },
-          { name: '💵 Exact Amount', value: `**₹${inrAmount}**`, inline: true },
+          { name: '💵 Exact Amount', value: `**₹${inrAmount.toFixed(2)}**`, inline: true },
           { name: '​', value: '​', inline: true },
           { name: '🏦 Bank Transfer', value: `**Bank:** ${bankName}\n**Name:** ${bankAccountName}\n**Account:** \`${bankAccountNumber}\`\n**IFSC:** \`${bankIfsc}\`` }
         )
-        .setFooter({ text: 'Step 4/6: After paying, upload a screenshot of your payment.' }),
+        .setFooter({ text: 'Step 4/5: After paying, upload a screenshot of your payment.' }),
     ],
   });
 
   // Step 5: Screenshot
   const screenshotUrl = await askForScreenshot(
     thread, user.id,
-    '**Step 5/6:** Please upload your payment screenshot (jpg/png/webp):'
+    '**Step 5/5:** Please upload your payment screenshot (jpg/png/webp):'
   );
 
   if (!screenshotUrl || screenshotUrl === 'cancel') {
-    await thread.send('❌ Order cancelled. You can close this ticket.');
-    return;
-  }
-
-  // Step 6: UTR
-  const utrNumber = await askWithRetry(
-    thread, user.id,
-    '**Step 6/6:** Enter your **UTR / Reference Number** from the payment:',
-    (msg) => {
-      const v = msg.content.trim();
-      if (v.length < 4) return 'UTR number too short.';
-      if (v.length > 50) return 'UTR number too long.';
-      if (!/^[a-zA-Z0-9]+$/.test(v)) return 'UTR should only contain letters and numbers.';
-      return null;
-    }
-  );
-
-  if (!utrNumber || utrNumber === 'cancel') {
     await thread.send('❌ Order cancelled. You can close this ticket.');
     return;
   }
@@ -215,7 +203,6 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
       inrAmount,
       network,
       walletAddress,
-      utrNumber,
       proofFilename,
       discordAttachmentUrl: screenshotUrl,
     });

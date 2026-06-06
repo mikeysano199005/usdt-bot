@@ -31,6 +31,21 @@ const config = {
   uploads: {
     dir: optionalEnv('UPLOADS_DIR', './uploads'),
   },
+
+  // Bank-SMS-to-email payment verification. Leave host blank to disable.
+  imap: {
+    host: optionalEnv('IMAP_HOST', ''),
+    port: parseInt(optionalEnv('IMAP_PORT', '993'), 10),
+    user: optionalEnv('IMAP_USER', ''),
+    password: optionalEnv('IMAP_PASSWORD', ''),
+    pollIntervalMs: parseInt(optionalEnv('IMAP_POLL_INTERVAL_MS', '30000'), 10),
+  },
+
+  // Shared secret for the MacroDroid -> /api/payment-webhook endpoint.
+  // Blank disables the webhook (every request is rejected).
+  webhook: {
+    secret: optionalEnv('PAYMENT_WEBHOOK_SECRET', ''),
+  },
 } as const;
 
 export default config;

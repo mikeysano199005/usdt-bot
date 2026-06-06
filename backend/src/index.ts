@@ -8,6 +8,7 @@ import { registerReadyEvent } from './bot/events/ready';
 import { registerInteractionCreate } from './bot/events/interactionCreate';
 import { registerMessageCreate } from './bot/events/messageCreate';
 import { setClient } from './services/notificationService';
+import { startImapPoller } from './services/bankSms/imapPoller';
 
 async function main(): Promise<void> {
   console.log('[App] Starting...');
@@ -24,6 +25,9 @@ async function main(): Promise<void> {
   startBot().catch((err) => {
     console.error('[Bot] Bot failed to start (API still running):', err);
   });
+
+  // Bank-SMS-to-email payment verification (no-op unless IMAP_* env vars are set).
+  startImapPoller();
 
   console.log('[App] Ready');
 }

@@ -8,6 +8,7 @@ import userRoutes from './routes/userRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import statsRoutes from './routes/statsRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import paymentWebhookRoutes from './routes/paymentWebhookRoutes';
 
 export function createExpressApp(): express.Application {
   const app = express();
@@ -28,6 +29,7 @@ export function createExpressApp(): express.Application {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/stats', statsRoutes);
   app.use('/api/uploads', uploadRoutes);
+  app.use('/api/payment-webhook', paymentWebhookRoutes);
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
