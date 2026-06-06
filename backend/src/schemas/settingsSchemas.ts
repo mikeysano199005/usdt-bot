@@ -12,5 +12,12 @@ export const UpdateSettingsSchema = z.object({
   our_wallet_trc20: z.string().max(255).optional(),
   our_wallet_bep20: z.string().max(255).optional(),
   our_wallet_erc20: z.string().max(255).optional(),
+  our_wallet_btc: z.string().max(255).optional(),
+  our_wallet_ltc: z.string().max(255).optional(),
+  binance_pay_id: z.string().max(100).optional(),
+  sell_rate_usdt: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
+  sell_rate_btc: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
+  sell_rate_ltc: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
+  sell_rate_eth: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
   rate_markup_percent: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Must be a valid percentage').optional(),
 });

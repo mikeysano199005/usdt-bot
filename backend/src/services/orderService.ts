@@ -58,11 +58,12 @@ export async function createOrder(data: {
 
 export async function createSellOrder(data: {
   userId: number;
-  usdtAmount: number;
+  coin: string;
+  usdtAmount: number; // amount of the selected coin
   inrAmount: number;
   exchangeRate: number;
-  network: string;
-  walletAddress: string;
+  network: string; // on-chain network or 'BINANCE_PAY'
+  walletAddress: string; // seller's payout UPI
   txHash: string;
   proofFilename: string;
   discordAttachmentUrl: string;
@@ -71,12 +72,13 @@ export async function createSellOrder(data: {
 
   const { rows: [order] } = await query<Order>(
     `INSERT INTO orders
-       (order_ref, user_id, inr_amount, usdt_amount, exchange_rate, network, wallet_address, status, utr_number, tx_hash, direction)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'payment_submitted', $8, $9, 'sell')
+       (order_ref, user_id, coin, inr_amount, usdt_amount, exchange_rate, network, wallet_address, status, utr_number, tx_hash, direction)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'payment_submitted', $9, $10, 'sell')
      RETURNING *`,
     [
       orderRef,
       data.userId,
+      data.coin,
       data.inrAmount.toFixed(2),
       data.usdtAmount.toFixed(6),
       data.exchangeRate.toFixed(4),

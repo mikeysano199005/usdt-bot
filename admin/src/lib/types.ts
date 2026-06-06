@@ -7,16 +7,17 @@ export type OrderStatus =
   | 'usdt_sent'
   | 'completed';
 
-export type CryptoNetwork = 'TRC20' | 'BEP20' | 'ERC20';
+export type CryptoNetwork = 'TRC20' | 'BEP20' | 'ERC20' | 'BTC' | 'LTC' | 'BINANCE_PAY';
 
 export interface Order {
   id: number;
   order_ref: string;
   user_id: number;
+  coin: string;
   inr_amount: string;
   usdt_amount: string;
   exchange_rate: string;
-  network: CryptoNetwork;
+  network: string;
   wallet_address: string;
   status: OrderStatus;
   direction: 'buy' | 'sell';
@@ -64,6 +65,13 @@ export interface Settings {
   our_wallet_trc20: string;
   our_wallet_bep20: string;
   our_wallet_erc20: string;
+  our_wallet_btc: string;
+  our_wallet_ltc: string;
+  binance_pay_id: string;
+  sell_rate_usdt: string;
+  sell_rate_btc: string;
+  sell_rate_ltc: string;
+  sell_rate_eth: string;
   rate_markup_percent: string;
 }
 

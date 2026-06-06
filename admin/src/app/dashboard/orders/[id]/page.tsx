@@ -55,9 +55,9 @@ export default function OrderDetailPage() {
           <InfoRow label="User" value={order.username ?? order.discord_id ?? '—'} />
           <InfoRow label="Discord ID" value={order.discord_id ?? '—'} />
           <InfoRow label="INR Amount" value={`₹${order.inr_amount}`} />
-          <InfoRow label="USDT Amount" value={`${parseFloat(order.usdt_amount).toFixed(6)} USDT`} />
+          <InfoRow label="Crypto Amount" value={`${parseFloat(order.usdt_amount).toFixed(6)} ${order.coin ?? 'USDT'}`} />
           <InfoRow label="Exchange Rate" value={`₹${order.exchange_rate}`} />
-          <InfoRow label="Network" value={order.network} />
+          <InfoRow label="Network" value={order.network === 'BINANCE_PAY' ? 'Binance Pay' : order.network} />
           <InfoRow label="Wallet Address" value={<span className="font-mono text-xs">{order.wallet_address}</span>} />
           <InfoRow label="UTR Number" value={order.utr_number ?? '—'} />
           {order.tx_hash && <InfoRow label="TX Hash" value={<span className="font-mono text-xs">{order.tx_hash}</span>} />}

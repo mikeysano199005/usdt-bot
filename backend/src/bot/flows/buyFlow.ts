@@ -4,7 +4,9 @@ import {
   ComponentType,
   ButtonInteraction,
   TextChannel,
+  AttachmentBuilder,
 } from 'discord.js';
+import QRCode from 'qrcode';
 import { getSetting } from '../../services/settingsService';
 import { getBuyRate } from '../../services/priceService';
 import { getUserByDiscordId } from '../../services/userService';
@@ -152,25 +154,42 @@ async function runBuyFlow(user: User, thread: TextChannel): Promise<void> {
     getSetting('bank_ifsc'),
   ]);
 
-  await thread.send({
-    embeds: [
-      new EmbedBuilder()
-        .setTitle('🏦 Payment Instructions')
-        .setColor(0xf59e0b)
-        .setDescription(
-          '⚠️ **Pay the EXACT amount below — including the paise.**\n' +
-          'The paise are unique to your order and are how we auto-detect your payment. ' +
-          'Paying a rounded amount will delay verification.'
-        )
-        .addFields(
-          { name: '📱 UPI ID', value: `\`${upiId}\``, inline: true },
-          { name: '💵 Exact Amount', value: `**₹${inrAmount.toFixed(2)}**`, inline: true },
-          { name: '​', value: '​', inline: true },
-          { name: '🏦 Bank Transfer', value: `**Bank:** ${bankName}\n**Name:** ${bankAccountName}\n**Account:** \`${bankAccountNumber}\`\n**IFSC:** \`${bankIfsc}\`` }
-        )
-        .setFooter({ text: 'Step 4/5: After paying, upload a screenshot of your payment.' }),
-    ],
-  });
+  // Build a UPI QR encoding the payee + exact (unique-paise) amount so the user
+  // can scan-to-pay instead of typing the amount (which avoids paise mistakes).
+  const paymentEmbed = new EmbedBuilder()
+    .setTitle('🏦 Payment Instructions')
+    .setColor(0xf59e0b)
+    .setDescription(
+      '⚠️ **Pay the EXACT amount below — including the paise.**\n' +
+      'The paise are unique to your order and are how we auto-detect your payment. ' +
+      'Paying a rounded amount will delay verification.\n\n' +
+      '📷 **Scan the QR** below in any UPI app — it pre-fills the exact amount.'
+    )
+    .addFields(
+      { name: '📱 UPI ID', value: `\`${upiId}\``, inline: true },
+      { name: '💵 Exact Amount', value: `**₹${inrAmount.toFixed(2)}**`, inline: true },
+      { name: '​', value: '​', inline: true },
+      { name: '🏦 Bank Transfer', value: `**Bank:** ${bankName}\n**Name:** ${bankAccountName}\n**Account:** \`${bankAccountNumber}\`\n**IFSC:** \`${bankIfsc}\`` }
+    )
+    .setFooter({ text: 'Step 4/5: After paying, upload a screenshot of your payment.' });
+
+  const files: AttachmentBuilder[] = [];
+  if (upiId) {
+    const upiUri =
+      `upi://pay?pa=${encodeURIComponent(upiId)}` +
+      `&pn=${encodeURIComponent(bankAccountName ?? 'Merchant')}` +
+      `&am=${inrAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('USDT order')}`;
+    try {
+      const qrBuffer = await QRCode.toBuffer(upiUri, { width: 320, margin: 1 });
+      const attachment = new AttachmentBuilder(qrBuffer, { name: 'upi-qr.png' });
+      paymentEmbed.setImage('attachment://upi-qr.png');
+      files.push(attachment);
+    } catch {
+      // QR generation failed — fall back to the text instructions only.
+    }
+  }
+
+  await thread.send({ embeds: [paymentEmbed], files });
 
   // Step 5: Screenshot
   const screenshotUrl = await askForScreenshot(

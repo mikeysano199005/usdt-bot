@@ -7,18 +7,21 @@ export type OrderStatus =
   | 'usdt_sent'
   | 'completed';
 
-export type CryptoNetwork = 'TRC20' | 'BEP20' | 'ERC20';
+// On-chain networks plus 'BINANCE_PAY' for off-chain Binance Pay sends.
+export type CryptoNetwork = 'TRC20' | 'BEP20' | 'ERC20' | 'BTC' | 'LTC' | 'BINANCE_PAY';
 
 export interface Order {
   id: number;
   order_ref: string;
   user_id: number;
+  coin: string;
   inr_amount: string;
   usdt_amount: string;
   exchange_rate: string;
-  network: CryptoNetwork;
+  network: string;
   wallet_address: string;
   status: OrderStatus;
+  direction: 'buy' | 'sell';
   utr_number: string | null;
   tx_hash: string | null;
   admin_notes: string | null;

@@ -18,19 +18,36 @@ export async function sendAdminChannelAlert(
     const channel = await discordClient.channels.fetch(config.discord.adminChannelId);
     if (!channel || !(channel instanceof TextChannel)) return;
 
+    const isSell = order.direction === 'sell';
+    const coin = order.coin ?? 'USDT';
+    const sentVia = order.network === 'BINANCE_PAY' ? 'Binance Pay' : order.network;
+
     const embed = new EmbedBuilder()
-      .setTitle('🆕 New Order Submitted')
+      .setTitle(isSell ? '🆕 New SELL Order' : '🆕 New BUY Order')
       .setColor(0xf59e0b)
       .addFields(
         { name: 'Order Ref', value: order.order_ref, inline: true },
         { name: 'User', value: userTag, inline: true },
+        { name: 'Status', value: order.status, inline: true },
+      )
+      .setTimestamp();
+
+    if (isSell) {
+      embed.addFields(
+        { name: 'Selling', value: `${order.usdt_amount} ${coin}`, inline: true },
+        { name: 'Payout', value: `₹${order.inr_amount}`, inline: true },
+        { name: 'Sent Via', value: sentVia, inline: true },
+        { name: 'Tx Hash / Ref', value: `\`${order.tx_hash ?? '—'}\`` },
+        { name: 'Payout UPI', value: `\`${order.wallet_address}\`` },
+      );
+    } else {
+      embed.addFields(
         { name: 'INR Amount', value: `₹${order.inr_amount}`, inline: true },
         { name: 'USDT Amount', value: `${order.usdt_amount} USDT`, inline: true },
         { name: 'Network', value: order.network, inline: true },
-        { name: 'Status', value: order.status, inline: true },
-        { name: 'Wallet', value: `\`${order.wallet_address}\`` }
-      )
-      .setTimestamp();
+        { name: 'Wallet', value: `\`${order.wallet_address}\`` },
+      );
+    }
 
     await channel.send({ embeds: [embed] });
   } catch {

@@ -18,6 +18,13 @@ const schema = z.object({
   our_wallet_trc20: z.string().min(1, 'Required for sell orders'),
   our_wallet_bep20: z.string().min(1, 'Required for sell orders'),
   our_wallet_erc20: z.string().min(1, 'Required for sell orders'),
+  our_wallet_btc: z.string().optional(),
+  our_wallet_ltc: z.string().optional(),
+  binance_pay_id: z.string().optional(),
+  sell_rate_usdt: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
+  sell_rate_btc: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
+  sell_rate_ltc: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
+  sell_rate_eth: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Must be a valid number').optional(),
   support_contact: z.string().min(1),
   support_response_hours: z.string().regex(/^\d+$/),
 });
@@ -92,9 +99,28 @@ export function SettingsForm({ settings, onSaved }: SettingsFormProps) {
           <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 text-xs font-medium px-2 py-1 rounded-full border border-yellow-100">✅ Binance Web3 Wallet</span>
         </div>
         <div className="space-y-3">
-          <Field name="our_wallet_trc20" label="TRC20 Wallet Address (Trust Wallet / Binance Web3)" placeholder="T..." mono />
-          <Field name="our_wallet_bep20" label="BEP20 Wallet Address (Trust Wallet / Binance Web3)" placeholder="0x..." mono />
-          <Field name="our_wallet_erc20" label="ERC20 Wallet Address (Trust Wallet / Binance Web3)" placeholder="0x..." mono />
+          <Field name="our_wallet_trc20" label="USDT TRC20 Wallet Address" placeholder="T..." mono />
+          <Field name="our_wallet_bep20" label="USDT BEP20 Wallet Address" placeholder="0x..." mono />
+          <Field name="our_wallet_erc20" label="ETH / ERC20 Wallet Address" placeholder="0x..." mono />
+          <Field name="our_wallet_btc" label="BTC Wallet Address" placeholder="bc1... / 1... / 3..." mono />
+          <Field name="our_wallet_ltc" label="LTC Wallet Address" placeholder="L... / ltc1..." mono />
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-1">🅱️ Binance Pay (for Sell Orders)</h3>
+        <p className="text-xs text-gray-500 mb-3">Sellers can send coins to this Binance Pay ID instead of an on-chain address.</p>
+        <Field name="binance_pay_id" label="Binance Pay ID" placeholder="123456789" mono />
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-1">💰 Sell Rates (INR per coin)</h3>
+        <p className="text-xs text-gray-500 mb-3">Fixed payout rate paid to sellers per 1 coin. Set 0 to disable a coin.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field name="sell_rate_usdt" label="USDT → INR" placeholder="85.00" />
+          <Field name="sell_rate_btc" label="BTC → INR" placeholder="5400000" />
+          <Field name="sell_rate_ltc" label="LTC → INR" placeholder="7000" />
+          <Field name="sell_rate_eth" label="ETH → INR" placeholder="300000" />
         </div>
       </section>
 
